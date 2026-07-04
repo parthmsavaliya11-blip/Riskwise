@@ -51,11 +51,31 @@ async function authPost(path, body) {
   return data;
 }
 
+async function authSend(path, body, method = "POST") {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try {
+    data = await res.json();
+  } catch {
+    /* no body */
+  }
+  if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+  return data;
+}
+
 export const getMe = () => getJSON("/api/auth/me"); // throws AuthError if not signed in
 export const login = (email, password) => authPost("/api/auth/login", { email, password });
 export const signup = (email, username, password) =>
   authPost("/api/auth/signup", { email, username, password });
 export const logout = () => authPost("/api/auth/logout", {});
+export const changeUsername = (username) => authSend("/api/auth/username", { username }, "PUT");
+export const changePassword = (current_password, new_password) =>
+  authSend("/api/auth/password", { current_password, new_password }, "PUT");
 
 // AI explainer availability — fetched once and memoized for all explainer panels.
 let _aiStatusPromise;

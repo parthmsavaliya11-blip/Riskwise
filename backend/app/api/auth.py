@@ -117,3 +117,47 @@ def logout(response: Response) -> dict:
 @router.get("/me")
 def me(user: User = Depends(require_user)) -> dict:
     return {"user": _user_out(user)}
+
+
+# --- Profile -------------------------------------------------------------
+class UsernameIn(BaseModel):
+    username: str = Field(min_length=3, max_length=20)
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.put("/username")
+def change_username(
+    payload: UsernameIn, user: User = Depends(require_user), db: Session = Depends(get_db)
+) -> dict:
+    new = payload.username.strip()
+    if not _USERNAME_RE.match(new):
+        raise HTTPException(400, "Username must be 3–20 letters, numbers or underscores.")
+    if new.lower() == user.username.lower():
+        raise HTTPException(400, "That's already your username.")
+    if user.username_changes >= 3:
+        raise HTTPException(403, "You've used all 3 username changes.")
+    if db.scalar(
+        select(User).where(func.lower(User.username) == new.lower(), User.id != user.id)
+    ):
+        raise HTTPException(409, "That username is taken.")
+    user.username = new
+    user.username_changes += 1
+    db.commit()
+    return {"user": _user_out(user)}
+
+
+@router.put("/password")
+def change_password(
+    payload: PasswordChangeIn, user: User = Depends(require_user), db: Session = Depends(get_db)
+) -> dict:
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(401, "Your current password is incorrect.")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(400, "The new password must be different.")
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True}

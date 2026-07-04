@@ -5,6 +5,7 @@ import Onboarding from "./components/Onboarding";
 import GuidedTour from "./components/GuidedTour";
 import { LogoMark } from "./components/Logo";
 import Auth from "./pages/Auth";
+import Profile from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Holdings from "./pages/Holdings";
 import Portfolios from "./pages/Portfolios";
@@ -207,6 +208,7 @@ function App() {
         {view === "basket" && <Basket />}
         {view === "risk" && <Risk initialBucket={navScope} />}
         {view === "journal" && <Journal />}
+        {view === "profile" && <Profile user={user} onUserUpdate={setUser} />}
       </Shell>
     );
   }
