@@ -206,8 +206,11 @@ the whole app in `App.jsx` (checks `GET /api/auth/me` on mount; `credentials:"in
 fetches; `AuthError` on 401); the Shell top bar shows the username + an "owner" tag + logout.
 New settings in `config.py`: `secret_key` (JWT signing — MUST be a long random value in prod),
 `jwt_expire_days`, `cookie_secure` (True in prod). Deps added: `bcrypt`, `PyJWT`, `email-validator`.
-**Still TODO (Stage 2/3): email verification, forgot-password reset, and the profile page
-(username change ≤ 3×).** Preserve the `user_id` column + `current_user_id()` scoping on any new table.
+**Profile shipped** (`pages/Profile.jsx`, opened from the top-bar user chip): `PUT /api/auth/username`
+(capped at 3 changes via `User.username_changes`, uniqueness-checked) and `PUT /api/auth/password`
+(verifies current password). **Still TODO (Stage 2): email verification + forgot-password reset — both
+need an email service (Resend); build with a dev fallback so they work before Resend is wired.** Then
+Render deploy + domain. Preserve the `user_id` column + `current_user_id()` scoping on any new table.
 
 **Config & secrets.** `backend/app/core/config.py` (`pydantic-settings`) reads
 `backend/.env`. `PROJECT_ROOT` is derived as `config.py`'s `parents[3]`; `DATA_DIR` is

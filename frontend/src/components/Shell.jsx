@@ -244,6 +244,32 @@ function ExpiryBanner({ expiry, onNavigate }) {
   );
 }
 
+// Account notices: a flash message (verify result, etc.) + a nudge to verify email.
+function AccountBanners({ user, onResendVerify, flash, onDismissFlash }) {
+  const showVerify = user && !user.email_verified;
+  if (!flash && !showVerify) return null;
+  return (
+    <div className="mx-auto w-full max-w-[1320px] space-y-2 px-5 pt-4 lg:px-8">
+      {flash && (
+        <AlertBanner tone={flash.ok ? "ok" : "warn"} title={flash.text}>
+          <button onClick={onDismissFlash} className="text-xs font-medium text-muted-strong underline-offset-2 hover:underline">
+            Dismiss
+          </button>
+        </AlertBanner>
+      )}
+      {showVerify && (
+        <AlertBanner tone="warn" title="Verify your email">
+          We sent a verification link to <span className="text-body">{user.email}</span>.{" "}
+          <button onClick={onResendVerify} className="font-semibold text-warn underline-offset-2 hover:underline">
+            Resend it
+          </button>
+          .
+        </AlertBanner>
+      )}
+    </div>
+  );
+}
+
 export default function Shell({
   view,
   onNavigate,
@@ -258,6 +284,9 @@ export default function Shell({
   expiry,
   user,
   onLogout,
+  onResendVerify,
+  flash,
+  onDismissFlash,
 }) {
   return (
     <div className="flex min-h-screen">
@@ -277,6 +306,7 @@ export default function Shell({
           onNavigate={onNavigate}
         />
         <MobileTabs view={view} onNavigate={onNavigate} open={navOpen} />
+        <AccountBanners user={user} onResendVerify={onResendVerify} flash={flash} onDismissFlash={onDismissFlash} />
         <ExpiryBanner expiry={expiry} onNavigate={onNavigate} />
         <main id="main" className="mx-auto w-full max-w-[1320px] flex-1 space-y-8 px-5 py-8 lg:px-8 lg:py-10">
           {children}

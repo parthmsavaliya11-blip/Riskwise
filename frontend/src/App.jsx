@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { getJSON, sendJSON, getMe, logout as apiLogout } from "./api/client";
+import {
+  getJSON,
+  sendJSON,
+  getMe,
+  logout as apiLogout,
+  verifyEmail,
+  resendVerification,
+} from "./api/client";
 import Shell from "./components/Shell";
 import Onboarding from "./components/Onboarding";
 import GuidedTour from "./components/GuidedTour";
@@ -48,6 +55,42 @@ function App() {
     setError(null);
     setView("dashboard");
     setExpiry({ settled: [], expiring: [] });
+  }, []);
+
+  // Email verification + password reset arrive as ?verify=… / ?reset=… links.
+  const [flash, setFlash] = useState(null);
+  const [resetToken, setResetToken] = useState(
+    () => new URLSearchParams(window.location.search).get("reset")
+  );
+  const stripParam = (name) => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete(name);
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? "?" + qs : ""));
+  };
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("verify");
+    if (!token) return;
+    verifyEmail(token)
+      .then(() => {
+        setFlash({ ok: true, text: "Email verified — thank you!" });
+        setUser((u) => (u ? { ...u, email_verified: true } : u));
+      })
+      .catch(() => setFlash({ ok: false, text: "That verification link is invalid or has expired." }))
+      .finally(() => stripParam("verify"));
+  }, []);
+  const clearReset = useCallback((msg) => {
+    setResetToken(null);
+    stripParam("reset");
+    if (msg) setFlash({ ok: true, text: msg });
+  }, []);
+  const onResendVerify = useCallback(async () => {
+    try {
+      await resendVerification();
+      setFlash({ ok: true, text: "Verification email sent — check your inbox." });
+    } catch {
+      setFlash({ ok: false, text: "Couldn't send the email. Please try again." });
+    }
   }, []);
 
   // Collapsible left menu (hamburger) — collapsing gives the active tab the full width.
@@ -136,6 +179,10 @@ function App() {
   }, [reload, user]);
 
   // Auth gate — before anything else.
+  // A password-reset link works even mid-session, so check it first.
+  if (resetToken) {
+    return <Auth resetToken={resetToken} onResetDone={clearReset} onAuthed={setUser} />;
+  }
   if (user === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -144,7 +191,7 @@ function App() {
     );
   }
   if (user === null) {
-    return <Auth onAuthed={setUser} />;
+    return <Auth onAuthed={setUser} flash={flash} />;
   }
 
   // The onboarding overlay plays over whatever the app is doing (loading, ready, or
@@ -192,6 +239,9 @@ function App() {
         expiry={expiry}
         user={user}
         onLogout={onLogout}
+        onResendVerify={onResendVerify}
+        flash={flash}
+        onDismissFlash={() => setFlash(null)}
       >
         {view === "dashboard" && (
           <Dashboard portfolio={portfolio} allocation={allocation} onNavigate={navigate} />

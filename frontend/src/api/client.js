@@ -76,6 +76,11 @@ export const logout = () => authPost("/api/auth/logout", {});
 export const changeUsername = (username) => authSend("/api/auth/username", { username }, "PUT");
 export const changePassword = (current_password, new_password) =>
   authSend("/api/auth/password", { current_password, new_password }, "PUT");
+export const verifyEmail = (token) => authPost("/api/auth/verify", { token });
+export const resendVerification = () => authPost("/api/auth/verify/resend", {});
+export const forgotPassword = (email) => authPost("/api/auth/forgot-password", { email });
+export const resetPassword = (token, password) =>
+  authPost("/api/auth/reset-password", { token, password });
 
 // AI explainer availability — fetched once and memoized for all explainer panels.
 let _aiStatusPromise;

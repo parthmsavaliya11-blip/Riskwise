@@ -17,7 +17,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..auth.deps import SESSION_COOKIE, require_user
-from ..auth.security import create_token, hash_password, verify_password
+from ..auth.email import send_password_reset, send_verification
+from ..auth.security import (
+    create_token,
+    decode_purpose_token,
+    hash_password,
+    verify_password,
+)
 from ..core.config import settings
 from ..db import get_db
 from ..models import Bucket, CashFlow, Position, Trade, User
@@ -95,7 +101,12 @@ def signup(payload: SignupIn, response: Response, db: Session = Depends(get_db))
     db.commit()
 
     _set_session(response, user.id)
-    return {"user": _user_out(user)}
+    dev_link = send_verification(user)
+    out = {"user": _user_out(user)}
+    # In dev without Resend configured, hand back the link so the flow is testable.
+    if not settings.email_enabled and settings.environment == "development":
+        out["dev_verify_link"] = dev_link
+    return out
 
 
 @router.post("/login")
@@ -159,5 +170,67 @@ def change_password(
     if payload.new_password == payload.current_password:
         raise HTTPException(400, "The new password must be different.")
     user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True}
+
+
+# --- Email verification & password reset ---------------------------------
+class TokenIn(BaseModel):
+    token: str
+
+
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+
+class ResetIn(BaseModel):
+    token: str
+    password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/verify")
+def verify_email(payload: TokenIn, db: Session = Depends(get_db)) -> dict:
+    """Confirm an email from the link (public — the token is the proof)."""
+    uid = decode_purpose_token(payload.token, "verify")
+    user = db.get(User, uid) if uid else None
+    if user is None:
+        raise HTTPException(400, "This verification link is invalid or has expired.")
+    if not user.email_verified:
+        user.email_verified = True
+        db.commit()
+    return {"ok": True, "user": _user_out(user)}
+
+
+@router.post("/verify/resend")
+def resend_verification(user: User = Depends(require_user)) -> dict:
+    if user.email_verified:
+        return {"ok": True, "already_verified": True}
+    dev_link = send_verification(user)
+    out = {"ok": True}
+    if not settings.email_enabled and settings.environment == "development":
+        out["dev_verify_link"] = dev_link
+    return out
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotIn, db: Session = Depends(get_db)) -> dict:
+    """Always returns ok — never reveal whether an email is registered."""
+    email = payload.email.strip().lower()
+    user = db.scalar(select(User).where(func.lower(User.email) == email))
+    out = {"ok": True}
+    if user is not None:
+        dev_link = send_password_reset(user)
+        if not settings.email_enabled and settings.environment == "development":
+            out["dev_reset_link"] = dev_link
+    return out
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetIn, db: Session = Depends(get_db)) -> dict:
+    uid = decode_purpose_token(payload.token, "reset")
+    user = db.get(User, uid) if uid else None
+    if user is None:
+        raise HTTPException(400, "This reset link is invalid or has expired. Request a new one.")
+    user.password_hash = hash_password(payload.password)
     db.commit()
     return {"ok": True}

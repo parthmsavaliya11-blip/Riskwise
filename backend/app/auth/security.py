@@ -41,9 +41,32 @@ def create_token(user_id: str) -> str:
 
 
 def decode_token(token: str) -> str | None:
-    """Return the user id from a valid token, or None if missing/expired/tampered."""
+    """Return the user id from a valid session token, or None if invalid/expired."""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGO])
+        if payload.get("purpose"):  # purpose tokens are not session tokens
+            return None
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
+def create_purpose_token(user_id: str, purpose: str, minutes: int) -> str:
+    """A short-lived, single-purpose token (email verification / password reset)."""
+    payload = {
+        "sub": user_id,
+        "purpose": purpose,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=minutes),
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=_ALGO)
+
+
+def decode_purpose_token(token: str, purpose: str) -> str | None:
+    """Return the user id if the token is valid AND matches the expected purpose."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGO])
+        if payload.get("purpose") != purpose:
+            return None
         return payload.get("sub")
     except Exception:
         return None

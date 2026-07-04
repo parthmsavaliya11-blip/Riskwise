@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     jwt_expire_days: int = 30          # how long a login stays valid (per device)
     cookie_secure: bool = False        # True in production (HTTPS-only cookie)
 
+    # --- Email (Resend) for verification + password reset ---
+    resend_api_key: str = ""
+    email_from: str = "RiskWise <onboarding@resend.dev>"
+    # Where verify/reset links point (the frontend origin). The domain in production.
+    app_base_url: str = "http://localhost:5173"
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
@@ -82,6 +88,11 @@ class Settings(BaseSettings):
     def market_enabled(self) -> bool:
         """Whether the Angel data-only market feed (prices/instruments) is on."""
         return self.market_data.lower() == "angel" and self.angel_configured
+
+    @property
+    def email_enabled(self) -> bool:
+        """Whether real emails can be sent (Resend key present)."""
+        return bool(self.resend_api_key)
 
     @property
     def gemini_configured(self) -> bool:
