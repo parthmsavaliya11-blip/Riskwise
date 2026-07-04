@@ -1,0 +1,8 @@
+symbol,quantity,avg_price,bucket
+RELIANCE,20,2750.50,Long-term
+HDFCBANK,30,1520.00,Long-term
+TCS,10,3650.00,Long-term
+TATAMOTORS,100,720.00,Swing
+ICICIBANK,40,980.00,Swing
+INFY,25,1450.00,Swing
+NIFTY24JUNFUT,50,23400.00,F&O

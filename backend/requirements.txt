@@ -1,0 +1,23 @@
+# Phase 0 foundation dependencies.
+# Unpinned so pip installs the latest wheels compatible with your Python version.
+# More libraries (numpy, scipy, pyxirr, smartapi-python, pyotp, anthropic) are
+# added in later phases.
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-dotenv
+SQLAlchemy
+pandas
+python-multipart
+
+# --- Live mode (Angel One SmartAPI). smartapi-python under-declares its deps,
+# so logzero + websocket-client are listed explicitly. ---
+smartapi-python
+pyotp
+logzero
+websocket-client
+
+# --- AI explainer (pluggable: Gemini free, or Claude paid) ---
+google-genai
+anthropic

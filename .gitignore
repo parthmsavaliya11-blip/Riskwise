@@ -1,0 +1,37 @@
+# --- Secrets (NEVER commit) ---
+.env
+backend/.env
+*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- Local database & generated data ---
+data/risk.db
+data/*.db
+data/*.db-journal
+data/*.db-wal
+# Angel instrument master dump — ~35 MB, refetched automatically on startup
+data/angel_instruments.json
+
+# --- Logs & runtime ---
+logs/
+*.log
+
+# --- Local tooling / editor config ---
+.claude/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.local
