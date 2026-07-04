@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
+from .auth.context import current_user_id
 from .core.config import settings
 from .data import get_provider
 from .data.provider import Holding
@@ -53,13 +54,17 @@ def load_holdings() -> list[Holding]:
     db = SessionLocal()
     try:
         positions = list(
-            db.scalars(select(Position).where(Position.user_id == settings.default_user_id))
+            db.scalars(select(Position).where(Position.user_id == current_user_id()))
         )
     finally:
         db.close()
 
     if not positions:
-        return provider.get_holdings()
+        # A signed-in user with no holdings starts empty; only the offline / no-auth
+        # context (verify scripts, startup warm-up) falls back to the sample portfolio.
+        if current_user_id() == settings.default_user_id:
+            return provider.get_holdings()
+        return []
 
     # One batched live-price call for all holdings, instead of one per stock.
     from .market import get_market
@@ -86,7 +91,7 @@ def user_has_positions() -> bool:
     try:
         return (
             db.scalar(
-                select(Position).where(Position.user_id == settings.default_user_id).limit(1)
+                select(Position).where(Position.user_id == current_user_id()).limit(1)
             )
             is not None
         )

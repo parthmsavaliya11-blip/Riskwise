@@ -183,11 +183,31 @@ Options and Risk pages; it hides itself when `ai_configured` is false.
 Wrap analytical API responses with `with_disclaimer(...)` from
 `backend/app/core/disclaimers.py` so the disclaimer rides along; the frontend renders it.
 
-**Multi-user readiness without multi-user complexity.** The app is single-user now, but
-every SQLAlchemy model (`backend/app/models/__init__.py`) carries `user_id` defaulting to
-`settings.default_user_id`. DB access goes through `backend/app/db.py` (SQLite by
-default). Moving to Postgres/multi-user is a `DATABASE_URL` + auth change, not a rewrite —
-preserve the `user_id` column on new tables.
+**Multi-user auth (Stage 1 shipped).** The app is now **multi-user with per-account data
+isolation**. A `User` table (`models/__init__.py`: id=uuid, email, username, bcrypt
+`password_hash`, `email_verified`, `username_changes`, `is_admin`) backs email+password
+signup/login. **Sessions are a JWT in an httpOnly cookie** (`rw_session`) — a login persists
+per browser until logout and the token is unreadable by page scripts. Auth lives in
+`backend/app/auth/`: `security.py` (bcrypt hash/verify + PyJWT), `context.py` (a `ContextVar`
++ `current_user_id()`), `deps.py` (`require_user` / `require_admin`). Endpoints:
+`api/auth.py` → `POST /api/auth/signup|login|logout`, `GET /api/auth/me` (public);
+**every data router is mounted with `dependencies=[Depends(require_user)]`** in `main.py`, so
+each data route requires login and 401s otherwise. **Isolation mechanism (important):**
+`require_user` is **async** so it sets the request-scoped current user in the request's own
+context; the sync endpoints (run in the threadpool) and everything they call read it via
+`current_user_id()` — which is what the model `user_id` defaults to and what every query/insert
+filters on (was `settings.default_user_id`). Each request has its own context, so users can
+never see each other's rows (verified). **First signup = owner**: `is_admin=True` **and** all
+pre-existing rows (`user_id == settings.default_user_id`, i.e. `"local-user"`) are re-assigned to
+that account — so the original single-user portfolio migrates to the owner, not a stranger.
+`load_holdings()` now returns `[]` for a signed-in user with no positions (only the offline/
+no-auth context still falls back to the sample). Frontend: `pages/Auth.jsx` (login/signup) gates
+the whole app in `App.jsx` (checks `GET /api/auth/me` on mount; `credentials:"include"` on all
+fetches; `AuthError` on 401); the Shell top bar shows the username + an "owner" tag + logout.
+New settings in `config.py`: `secret_key` (JWT signing — MUST be a long random value in prod),
+`jwt_expire_days`, `cookie_secure` (True in prod). Deps added: `bcrypt`, `PyJWT`, `email-validator`.
+**Still TODO (Stage 2/3): email verification, forgot-password reset, and the profile page
+(username change ≤ 3×).** Preserve the `user_id` column + `current_user_id()` scoping on any new table.
 
 **Config & secrets.** `backend/app/core/config.py` (`pydantic-settings`) reads
 `backend/.env`. `PROJECT_ROOT` is derived as `config.py`'s `parents[3]`; `DATA_DIR` is

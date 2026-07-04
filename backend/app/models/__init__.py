@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from ..auth.context import current_user_id
 from ..core.config import settings
 
 
@@ -28,7 +29,7 @@ class Bucket(Base):
     __tablename__ = "buckets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(64), default=settings.default_user_id, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), default=current_user_id, index=True)
     name: Mapped[str] = mapped_column(String(64))
     target_pct: Mapped[float] = mapped_column(Float, default=0.0)
     tolerance_pct: Mapped[float] = mapped_column(Float, default=5.0)
@@ -47,7 +48,7 @@ class Position(Base):
     __tablename__ = "positions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(64), default=settings.default_user_id, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), default=current_user_id, index=True)
     symbol: Mapped[str] = mapped_column(String(32))           # display/underlying symbol
     bucket: Mapped[str] = mapped_column(String(64), default="Long-term")
     quantity: Mapped[float] = mapped_column(Float, default=0.0)  # total units (lots x lot_size for F&O)
@@ -76,7 +77,7 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(64), default=settings.default_user_id, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), default=current_user_id, index=True)
     symbol: Mapped[str] = mapped_column(String(32))
     bucket: Mapped[str] = mapped_column(String(64), default="unassigned")
     side: Mapped[str] = mapped_column(String(8), default="long")  # long | short
@@ -98,11 +99,28 @@ class CashFlow(Base):
     __tablename__ = "cash_flows"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(64), default=settings.default_user_id, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), default=current_user_id, index=True)
     bucket: Mapped[str] = mapped_column(String(64), default="unassigned")
     amount: Mapped[float] = mapped_column(Float, default=0.0)  # +in / -out
     flow_date: Mapped[datetime] = mapped_column(DateTime, default=_now)
     note: Mapped[str] = mapped_column(String(255), default="")
 
 
-__all__ = ["Base", "Bucket", "Position", "Trade", "CashFlow"]
+class User(Base):
+    """An account. Passwords are stored only as a bcrypt hash. The first user to sign
+    up becomes the owner/admin and inherits any pre-existing single-user data."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # uuid4
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Usernames may be changed at most 3 times.
+    username_changes: Mapped[int] = mapped_column(Integer, default=0)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+__all__ = ["Base", "Bucket", "Position", "Trade", "CashFlow", "User"]

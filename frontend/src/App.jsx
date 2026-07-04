@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { getJSON, sendJSON } from "./api/client";
+import { getJSON, sendJSON, getMe, logout as apiLogout } from "./api/client";
 import Shell from "./components/Shell";
 import Onboarding from "./components/Onboarding";
 import GuidedTour from "./components/GuidedTour";
 import { LogoMark } from "./components/Logo";
+import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Holdings from "./pages/Holdings";
 import Portfolios from "./pages/Portfolios";
@@ -25,6 +26,28 @@ function App() {
   const [error, setError] = useState(null);
   // F&O expiry: positions auto-settled into the journal + those expiring within a day.
   const [expiry, setExpiry] = useState({ settled: [], expiring: [] });
+
+  // Auth: undefined = checking the session, null = signed out, object = signed in.
+  const [user, setUser] = useState(undefined);
+  useEffect(() => {
+    getMe()
+      .then((r) => setUser(r.user))
+      .catch(() => setUser(null));
+  }, []);
+  const onLogout = useCallback(async () => {
+    try {
+      await apiLogout();
+    } catch {
+      /* ignore */
+    }
+    setUser(null);
+    setPortfolio(null);
+    setAllocation(null);
+    setBuckets(null);
+    setError(null);
+    setView("dashboard");
+    setExpiry({ settled: [], expiring: [] });
+  }, []);
 
   // Collapsible left menu (hamburger) — collapsing gives the active tab the full width.
   const [navOpen, setNavOpen] = useState(true);
@@ -88,6 +111,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) return; // nothing loads until signed in
     getJSON("/api/status").then(setStatus).catch((e) => setError(e.message));
     // Auto-settle any expired F&O into the journal first, then load the (now-current)
     // portfolio, then note anything expiring within a day for the alert. Best-effort —
@@ -108,7 +132,19 @@ function App() {
         setExpiry({ settled, expiring: [] });
       }
     })();
-  }, [reload]);
+  }, [reload, user]);
+
+  // Auth gate — before anything else.
+  if (user === undefined) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <LogoMark size={52} animated className="rw-float" />
+      </div>
+    );
+  }
+  if (user === null) {
+    return <Auth onAuthed={setUser} />;
+  }
 
   // The onboarding overlay plays over whatever the app is doing (loading, ready, or
   // even an error) so the entrance is instant and data loads behind it.
@@ -153,6 +189,8 @@ function App() {
         navOpen={navOpen}
         onToggleNav={toggleNav}
         expiry={expiry}
+        user={user}
+        onLogout={onLogout}
       >
         {view === "dashboard" && (
           <Dashboard portfolio={portfolio} allocation={allocation} onNavigate={navigate} />

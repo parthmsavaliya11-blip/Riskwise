@@ -1,8 +1,12 @@
 // Tiny fetch helper. The Vite dev server proxies "/api" to the backend.
 
+// A 401 from any call means "not signed in" — the app catches this to show login.
+export class AuthError extends Error {}
+
 export async function getJSON(path) {
-  const res = await fetch(path);
+  const res = await fetch(path, { credentials: "include" });
   if (!res.ok) {
+    if (res.status === 401) throw new AuthError("Not signed in");
     throw new Error(`Request to ${path} failed (${res.status})`);
   }
   return res.json();
@@ -12,9 +16,11 @@ export async function sendJSON(path, body, method = "POST") {
   const res = await fetch(path, {
     method,
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    if (res.status === 401) throw new AuthError("Not signed in");
     let detail = "";
     try {
       detail = JSON.stringify(await res.json());
@@ -25,6 +31,31 @@ export async function sendJSON(path, body, method = "POST") {
   }
   return res.json();
 }
+
+// --- Auth ---------------------------------------------------------------
+// Auth calls surface the backend's clean `detail` message (e.g. "That username is taken.").
+async function authPost(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try {
+    data = await res.json();
+  } catch {
+    /* no body */
+  }
+  if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+  return data;
+}
+
+export const getMe = () => getJSON("/api/auth/me"); // throws AuthError if not signed in
+export const login = (email, password) => authPost("/api/auth/login", { email, password });
+export const signup = (email, username, password) =>
+  authPost("/api/auth/signup", { email, username, password });
+export const logout = () => authPost("/api/auth/logout", {});
 
 // AI explainer availability — fetched once and memoized for all explainer panels.
 let _aiStatusPromise;

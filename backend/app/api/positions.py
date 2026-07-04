@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..auth.context import current_user_id
 from ..core.config import settings
 from ..core.disclaimers import with_disclaimer
 from ..data import get_provider
@@ -147,7 +148,7 @@ def _list(db: Session, provider) -> dict:
 
     stmt = (
         select(Position)
-        .where(Position.user_id == settings.default_user_id)
+        .where(Position.user_id == current_user_id())
         .order_by(Position.bucket, Position.symbol)
     )
     positions = list(db.scalars(stmt))
@@ -165,7 +166,7 @@ def list_positions(db: Session = Depends(get_db)) -> dict:
 
 def _make(payload: PositionIn) -> Position:
     return Position(
-        user_id=settings.default_user_id,
+        user_id=current_user_id(),
         symbol=payload.symbol.strip().upper(),
         bucket=payload.bucket.strip() or "Long-term",
         quantity=payload.quantity,
@@ -212,7 +213,7 @@ def position_expiries(db: Session = Depends(get_db)) -> dict:
 
     mkt = get_market()
     today = date.today()
-    stmt = select(Position).where(Position.user_id == settings.default_user_id)
+    stmt = select(Position).where(Position.user_id == current_user_id())
     expiring_soon, expired = [], []
     for p in db.scalars(stmt):
         exp = _expiry_of(p, mkt)
@@ -252,7 +253,7 @@ def settle_expired(db: Session = Depends(get_db)) -> dict:
     mkt = get_market()
     today = date.today()
     settled: list[dict] = []
-    stmt = select(Position).where(Position.user_id == settings.default_user_id)
+    stmt = select(Position).where(Position.user_id == current_user_id())
     for p in list(db.scalars(stmt)):
         exp = _expiry_of(p, mkt)
         if exp is None or exp >= today:
@@ -280,7 +281,7 @@ def settle_expired(db: Session = Depends(get_db)) -> dict:
         exit_at = datetime.combine(max(exp, entry_at.date()), datetime.min.time())
         side = "short" if (getattr(p, "side", "buy") or "buy") == "sell" else "long"
         db.add(Trade(
-            user_id=settings.default_user_id,
+            user_id=current_user_id(),
             symbol=p.symbol,
             bucket=p.bucket,
             side=side,
@@ -321,7 +322,7 @@ def close_position(position_id: int, payload: CloseHoldingIn, db: Session = Depe
     closed trade in the financial-year review.
     """
     p = db.get(Position, position_id)
-    if p is None or p.user_id != settings.default_user_id:
+    if p is None or p.user_id != current_user_id():
         raise HTTPException(status_code=404, detail="Holding not found")
 
     entry_at = p.buy_date or _parse_date(payload.entry_date)
@@ -347,7 +348,7 @@ def close_position(position_id: int, payload: CloseHoldingIn, db: Session = Depe
     # buy/sell holding -> long/short trade; no planned stop, so R-multiple is undefined.
     side = "short" if (getattr(p, "side", "buy") or "buy") == "sell" else "long"
     db.add(Trade(
-        user_id=settings.default_user_id,
+        user_id=current_user_id(),
         symbol=p.symbol,
         bucket=p.bucket,
         side=side,
@@ -373,7 +374,7 @@ def close_position(position_id: int, payload: CloseHoldingIn, db: Session = Depe
 @router.put("/{position_id}")
 def update_position(position_id: int, payload: PositionIn, db: Session = Depends(get_db)) -> dict:
     p = db.get(Position, position_id)
-    if p is None or p.user_id != settings.default_user_id:
+    if p is None or p.user_id != current_user_id():
         raise HTTPException(status_code=404, detail="Position not found")
     p.symbol = payload.symbol.strip().upper()
     p.bucket = payload.bucket.strip() or "Long-term"
@@ -394,7 +395,7 @@ def update_position(position_id: int, payload: PositionIn, db: Session = Depends
 @router.delete("/{position_id}")
 def delete_position(position_id: int, db: Session = Depends(get_db)) -> dict:
     p = db.get(Position, position_id)
-    if p is None or p.user_id != settings.default_user_id:
+    if p is None or p.user_id != current_user_id():
         raise HTTPException(status_code=404, detail="Position not found")
     db.delete(p)
     db.commit()

@@ -11,6 +11,11 @@ SQLAlchemy
 pandas
 python-multipart
 
+# --- Auth (multi-user): password hashing + signed session tokens + email validation ---
+bcrypt
+PyJWT
+email-validator
+
 # --- Live mode (Angel One SmartAPI). smartapi-python under-declares its deps,
 # so logzero + websocket-client are listed explicitly. ---
 smartapi-python

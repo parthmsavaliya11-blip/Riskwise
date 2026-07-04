@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..auth.context import current_user_id
 from ..core.config import settings
 from ..core.disclaimers import with_disclaimer
 from ..db import get_db
@@ -49,7 +50,7 @@ def get_allocation(db: Session = Depends(get_db)) -> dict:
 
     stmt = (
         select(Bucket)
-        .where(Bucket.user_id == settings.default_user_id)
+        .where(Bucket.user_id == current_user_id())
         .order_by(Bucket.target_pct.desc())
     )
     targets = [

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..auth.context import current_user_id
 from ..core.config import settings
 from ..core.disclaimers import with_disclaimer
 from ..data import get_provider
@@ -89,7 +90,7 @@ def _row(t: Trade) -> dict:
 def _list(db: Session) -> list[Trade]:
     stmt = (
         select(Trade)
-        .where(Trade.user_id == settings.default_user_id)
+        .where(Trade.user_id == current_user_id())
         .order_by(Trade.opened_at.desc(), Trade.id.desc())
     )
     return list(db.scalars(stmt))
@@ -132,7 +133,7 @@ def _open_holdings(db: Session) -> list[dict]:
     """
     provider = get_provider()
     positions = list(db.scalars(
-        select(Position).where(Position.user_id == settings.default_user_id)
+        select(Position).where(Position.user_id == current_user_id())
     ))
     from ..market import get_market
     mkt = get_market()
@@ -169,7 +170,7 @@ def create_trade(payload: TradeIn, db: Session = Depends(get_db)) -> dict:
         if closed_at < opened_at:
             raise HTTPException(status_code=400, detail="Exit date can't be before the entry date.")
     t = Trade(
-        user_id=settings.default_user_id,
+        user_id=current_user_id(),
         symbol=payload.symbol.strip().upper(),
         bucket=payload.bucket.strip() or "unassigned",
         side=payload.side,
@@ -192,7 +193,7 @@ def create_trade(payload: TradeIn, db: Session = Depends(get_db)) -> dict:
 @router.put("/{trade_id}/close")
 def close_trade(trade_id: int, payload: CloseIn, db: Session = Depends(get_db)) -> dict:
     t = db.get(Trade, trade_id)
-    if t is None or t.user_id != settings.default_user_id:
+    if t is None or t.user_id != current_user_id():
         raise HTTPException(status_code=404, detail="Trade not found")
     exit_at = _parse_date(payload.exit_date)
     if exit_at is None:
@@ -211,7 +212,7 @@ def close_trade(trade_id: int, payload: CloseIn, db: Session = Depends(get_db)) 
 @router.delete("/{trade_id}")
 def delete_trade(trade_id: int, db: Session = Depends(get_db)) -> dict:
     t = db.get(Trade, trade_id)
-    if t is None or t.user_id != settings.default_user_id:
+    if t is None or t.user_id != current_user_id():
         raise HTTPException(status_code=404, detail="Trade not found")
     db.delete(t)
     db.commit()

@@ -152,7 +152,23 @@ function IconButton({ name, label, onClick }) {
   );
 }
 
-function TopBar({ totals, dataMode, onReplayTour, theme, onToggleTheme, navOpen, onToggleNav }) {
+function UserMenu({ user, onLogout }) {
+  if (!user) return null;
+  return (
+    <div className="flex items-center gap-2 border-l border-hairline pl-3">
+      <span className="hidden items-center gap-1.5 text-sm font-medium text-body md:inline-flex" title={user.email}>
+        <Icon name="user" size={15} className="text-muted" />
+        {user.username}
+        {user.is_admin && (
+          <span className="rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gold">owner</span>
+        )}
+      </span>
+      <IconButton name="logout" label="Log out" onClick={onLogout} />
+    </div>
+  );
+}
+
+function TopBar({ totals, dataMode, onReplayTour, theme, onToggleTheme, navOpen, onToggleNav, user, onLogout }) {
   const pnl = totals?.pnl ?? 0;
   const up = pnl >= 0;
   const dark = theme !== "light";
@@ -192,6 +208,7 @@ function TopBar({ totals, dataMode, onReplayTour, theme, onToggleTheme, navOpen,
           onClick={onToggleTheme}
         />
         {onReplayTour && <IconButton name="help" label="Take the tour" onClick={onReplayTour} />}
+        <UserMenu user={user} onLogout={onLogout} />
       </div>
     </header>
   );
@@ -235,6 +252,8 @@ export default function Shell({
   navOpen = true,
   onToggleNav,
   expiry,
+  user,
+  onLogout,
 }) {
   return (
     <div className="flex min-h-screen">
@@ -249,6 +268,8 @@ export default function Shell({
           onToggleTheme={onToggleTheme}
           navOpen={navOpen}
           onToggleNav={onToggleNav}
+          user={user}
+          onLogout={onLogout}
         />
         <MobileTabs view={view} onNavigate={onNavigate} open={navOpen} />
         <ExpiryBanner expiry={expiry} onNavigate={onNavigate} />

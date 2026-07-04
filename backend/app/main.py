@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (
     ai,
     allocation,
+    auth,
     basket,
     buckets,
     fno,
@@ -29,6 +30,7 @@ from .api import (
     symbols,
 )
 from .api.buckets import seed_default_buckets
+from .auth.deps import require_user
 from .core.config import settings
 from .core.disclaimers import DISCLAIMER
 from .db import init_db
@@ -76,21 +78,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Public routes — no login required.
 app.include_router(status.router)
-app.include_router(portfolio.router)
-app.include_router(buckets.router)
-app.include_router(allocation.router)
-app.include_router(sizing.router)
-app.include_router(hedge.router)
-app.include_router(options.router)
-app.include_router(risk.router)
-app.include_router(journal.router)
-app.include_router(ai.router)
-app.include_router(positions.router)
-app.include_router(symbols.router)
-app.include_router(instruments.router)
-app.include_router(fno.router)
-app.include_router(basket.router)
+app.include_router(auth.router)
+
+# Everything below requires a signed-in user and is automatically scoped to them
+# (require_user resolves the session cookie and pins the request to that user).
+_auth = [Depends(require_user)]
+app.include_router(portfolio.router, dependencies=_auth)
+app.include_router(buckets.router, dependencies=_auth)
+app.include_router(allocation.router, dependencies=_auth)
+app.include_router(sizing.router, dependencies=_auth)
+app.include_router(hedge.router, dependencies=_auth)
+app.include_router(options.router, dependencies=_auth)
+app.include_router(risk.router, dependencies=_auth)
+app.include_router(journal.router, dependencies=_auth)
+app.include_router(ai.router, dependencies=_auth)
+app.include_router(positions.router, dependencies=_auth)
+app.include_router(symbols.router, dependencies=_auth)
+app.include_router(instruments.router, dependencies=_auth)
+app.include_router(fno.router, dependencies=_auth)
+app.include_router(basket.router, dependencies=_auth)
 
 
 @app.get("/health")

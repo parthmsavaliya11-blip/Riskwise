@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..auth.context import current_user_id
 from ..core.config import settings
 from ..db import SessionLocal, get_db
 from ..models import Bucket
@@ -49,7 +50,7 @@ def _to_out(b: Bucket) -> dict:
 def _list(db: Session) -> list[Bucket]:
     stmt = (
         select(Bucket)
-        .where(Bucket.user_id == settings.default_user_id)
+        .where(Bucket.user_id == current_user_id())
         .order_by(Bucket.target_pct.desc(), Bucket.name)
     )
     return list(db.scalars(stmt))
@@ -69,11 +70,11 @@ def list_buckets(db: Session = Depends(get_db)) -> dict:
 @router.put("")
 def replace_buckets(payload: list[BucketIn], db: Session = Depends(get_db)) -> dict:
     """Replace the whole bucket set for this user (the 'save my plan' action)."""
-    db.query(Bucket).filter(Bucket.user_id == settings.default_user_id).delete()
+    db.query(Bucket).filter(Bucket.user_id == current_user_id()).delete()
     for item in payload:
         db.add(
             Bucket(
-                user_id=settings.default_user_id,
+                user_id=current_user_id(),
                 name=item.name.strip(),
                 target_pct=item.target_pct,
                 tolerance_pct=item.tolerance_pct,
@@ -85,9 +86,9 @@ def replace_buckets(payload: list[BucketIn], db: Session = Depends(get_db)) -> d
 
 @router.post("/reset-defaults")
 def reset_defaults(db: Session = Depends(get_db)) -> dict:
-    db.query(Bucket).filter(Bucket.user_id == settings.default_user_id).delete()
+    db.query(Bucket).filter(Bucket.user_id == current_user_id()).delete()
     for item in DEFAULT_BUCKETS:
-        db.add(Bucket(user_id=settings.default_user_id, **item))
+        db.add(Bucket(user_id=current_user_id(), **item))
     db.commit()
     return list_buckets(db)
 
@@ -101,11 +102,11 @@ def seed_default_buckets() -> None:
     db = SessionLocal()
     try:
         existing = db.scalar(
-            select(Bucket).where(Bucket.user_id == settings.default_user_id).limit(1)
+            select(Bucket).where(Bucket.user_id == current_user_id()).limit(1)
         )
         if existing is None:
             for item in DEFAULT_BUCKETS:
-                db.add(Bucket(user_id=settings.default_user_id, **item))
+                db.add(Bucket(user_id=current_user_id(), **item))
             db.commit()
     finally:
         db.close()

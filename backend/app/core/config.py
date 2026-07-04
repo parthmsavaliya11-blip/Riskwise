@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     # --- CORS: where the frontend dev server runs ---
     frontend_origin: str = "http://localhost:5173"
 
+    # --- Auth (multi-user) ---
+    # Signs the session token — MUST be set to a long random value in production.
+    secret_key: str = "dev-insecure-secret-change-in-production"
+    jwt_expire_days: int = 30          # how long a login stays valid (per device)
+    cookie_secure: bool = False        # True in production (HTTPS-only cookie)
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
