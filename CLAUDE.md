@@ -208,9 +208,21 @@ New settings in `config.py`: `secret_key` (JWT signing — MUST be a long random
 `jwt_expire_days`, `cookie_secure` (True in prod). Deps added: `bcrypt`, `PyJWT`, `email-validator`.
 **Profile shipped** (`pages/Profile.jsx`, opened from the top-bar user chip): `PUT /api/auth/username`
 (capped at 3 changes via `User.username_changes`, uniqueness-checked) and `PUT /api/auth/password`
-(verifies current password). **Still TODO (Stage 2): email verification + forgot-password reset — both
-need an email service (Resend); build with a dev fallback so they work before Resend is wired.** Then
-Render deploy + domain. Preserve the `user_id` column + `current_user_id()` scoping on any new table.
+(verifies current password). **Email verification + forgot-password shipped** (`auth/email.py` +
+`auth/security.py` purpose tokens): signup emails a 24h `verify` link; `POST /api/auth/verify`,
+`verify/resend`, `forgot-password` (never leaks whether an email exists), `reset-password` (30m `reset`
+token). Purpose tokens are single-use-by-purpose (a verify token 400s if used to reset). Sender is
+pluggable — **Resend** via plain `urllib` (MUST send a real `User-Agent`, else Cloudflare 403s with
+"error 1010"); with no key it falls back to dev mode (link logged + returned in `dev_*_link` when
+`environment=="development"`). New `config.py`: `resend_api_key`, `email_from`, `app_base_url` (where
+verify/reset links point). Frontend: `Auth.jsx` has login/signup/forgot/reset modes (reset via
+`?reset=token`, verify via `?verify=token` handled in `App.jsx`); a non-blocking "verify your email"
+nudge banner in the Shell. **GOTCHA — Resend test mode:** until a domain is verified at
+resend.com/domains (and `EMAIL_FROM` points to it), Resend only delivers to the account owner's own
+email; sending elsewhere 403s. **Auth is complete (Stages 1–3). Next: Render deploy + point the
+domain** (DB → Neon Postgres via `DATABASE_URL`; secrets → Render env; `cookie_secure=True`,
+`app_base_url`/`frontend_origin` → the real domain). Preserve `user_id` + `current_user_id()` scoping
+on any new table.
 
 **Config & secrets.** `backend/app/core/config.py` (`pydantic-settings`) reads
 `backend/.env`. `PROJECT_ROOT` is derived as `config.py`'s `parents[3]`; `DATA_DIR` is
