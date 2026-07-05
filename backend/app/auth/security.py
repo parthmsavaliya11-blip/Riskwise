@@ -31,22 +31,24 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_token(user_id: str) -> str:
+def create_token(user_id: str, session_id: str) -> str:
     payload = {
         "sub": user_id,
+        "sid": session_id,  # ties the token to a server-side Session row
         "exp": datetime.now(timezone.utc) + timedelta(days=settings.jwt_expire_days),
         "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, settings.secret_key, algorithm=_ALGO)
 
 
-def decode_token(token: str) -> str | None:
-    """Return the user id from a valid session token, or None if invalid/expired."""
+def decode_token(token: str) -> dict | None:
+    """Return the decoded session-token payload ({'sub','sid',...}), or None if
+    invalid/expired. Purpose tokens (verify/reset) are rejected here."""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGO])
         if payload.get("purpose"):  # purpose tokens are not session tokens
             return None
-        return payload.get("sub")
+        return payload
     except Exception:
         return None
 

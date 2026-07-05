@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -22,16 +22,22 @@ from ..auth.ratelimit import rate_limit
 from ..auth.security import (
     create_token,
     decode_purpose_token,
+    decode_token,
     hash_password,
     verify_password,
 )
 from ..core.config import settings
 from ..db import get_db
-from ..models import Bucket, CashFlow, Position, Trade, User
+from ..models import Bucket, CashFlow, Position
+from ..models import Session as SessionRow
+from ..models import Trade, User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
+# How many devices a user can be signed in on at once. A newer login past this cap
+# evicts the oldest, which logs that device out on its next request.
+MAX_SESSIONS = 2
 
 
 class SignupIn(BaseModel):
@@ -57,10 +63,30 @@ def _user_out(u: User) -> dict:
     }
 
 
-def _set_session(response: Response, user_id: str) -> None:
+def _start_session(response: Response, user: User, db: Session, request: Request) -> None:
+    """Create a tracked session for this device, set the cookie, and enforce the
+    per-user device cap — a newer login past MAX_SESSIONS evicts the oldest."""
+    sess = SessionRow(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        user_agent=(request.headers.get("user-agent") or "")[:255],
+    )
+    db.add(sess)
+    db.flush()
+    # Keep the newest MAX_SESSIONS logins; delete anything older (evicts those devices).
+    rows = list(
+        db.scalars(
+            select(SessionRow)
+            .where(SessionRow.user_id == user.id)
+            .order_by(SessionRow.created_at.desc(), SessionRow.id.desc())
+        )
+    )
+    for old in rows[MAX_SESSIONS:]:
+        db.delete(old)
+    db.commit()
     response.set_cookie(
         key=SESSION_COOKIE,
-        value=create_token(user_id),
+        value=create_token(user.id, sess.id),
         max_age=settings.jwt_expire_days * 86400,
         httponly=True,
         secure=settings.cookie_secure,
@@ -70,7 +96,7 @@ def _set_session(response: Response, user_id: str) -> None:
 
 
 @router.post("/signup", dependencies=[Depends(rate_limit(5, 3600))])
-def signup(payload: SignupIn, response: Response, db: Session = Depends(get_db)) -> dict:
+def signup(payload: SignupIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
     email = payload.email.strip().lower()
     username = payload.username.strip()
     if not _USERNAME_RE.match(username):
@@ -101,7 +127,7 @@ def signup(payload: SignupIn, response: Response, db: Session = Depends(get_db))
             )
     db.commit()
 
-    _set_session(response, user.id)
+    _start_session(response, user, db, request)
     dev_link = send_verification(user)
     out = {"user": _user_out(user)}
     # In dev without Resend configured, hand back the link so the flow is testable.
@@ -111,17 +137,26 @@ def signup(payload: SignupIn, response: Response, db: Session = Depends(get_db))
 
 
 @router.post("/login", dependencies=[Depends(rate_limit(10, 900))])
-def login(payload: LoginIn, response: Response, db: Session = Depends(get_db)) -> dict:
+def login(payload: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
     email = payload.email.strip().lower()
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(401, "Wrong email or password.")
-    _set_session(response, user.id)
+    _start_session(response, user, db, request)
     return {"user": _user_out(user)}
 
 
 @router.post("/logout")
-def logout(response: Response) -> dict:
+def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
+    # Delete just this device's session (other devices stay logged in).
+    token = request.cookies.get(SESSION_COOKIE)
+    payload = decode_token(token) if token else None
+    sid = payload.get("sid") if payload else None
+    if sid:
+        s = db.get(SessionRow, sid)
+        if s is not None:
+            db.delete(s)
+            db.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
 

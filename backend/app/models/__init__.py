@@ -123,4 +123,17 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
-__all__ = ["Base", "Bucket", "Position", "Trade", "CashFlow", "User"]
+class Session(Base):
+    """An active login (one per device). Sessions are tracked server-side so we can
+    cap concurrent devices per user and revoke them (a new login past the cap evicts
+    the oldest). The session id is carried inside the JWT cookie as ``sid``."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # uuid4 = the sid
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_agent: Mapped[str] = mapped_column(String(255), default="")  # device label
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+__all__ = ["Base", "Bucket", "Position", "Trade", "CashFlow", "User", "Session"]

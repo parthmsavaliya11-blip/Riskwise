@@ -6,6 +6,7 @@ import {
   logout as apiLogout,
   verifyEmail,
   resendVerification,
+  AuthError,
 } from "./api/client";
 import Shell from "./components/Shell";
 import Onboarding from "./components/Onboarding";
@@ -137,15 +138,25 @@ function App() {
   }, []);
 
   // Refetch everything that depends on holdings/plan (after a bucket edit, etc.).
+  // A 401 here means this device's session was revoked (logged out elsewhere, or
+  // evicted by a newer login past the device cap) — drop cleanly to the login screen.
   const reload = useCallback(async () => {
-    const [p, a, b] = await Promise.all([
-      getJSON("/api/portfolio"),
-      getJSON("/api/allocation"),
-      getJSON("/api/buckets"),
-    ]);
-    setPortfolio(p);
-    setAllocation(a);
-    setBuckets(b);
+    try {
+      const [p, a, b] = await Promise.all([
+        getJSON("/api/portfolio"),
+        getJSON("/api/allocation"),
+        getJSON("/api/buckets"),
+      ]);
+      setPortfolio(p);
+      setAllocation(a);
+      setBuckets(b);
+    } catch (e) {
+      if (e instanceof AuthError) {
+        setUser(null);
+        return;
+      }
+      throw e;
+    }
   }, []);
 
   // Navigate to a view, optionally scoped to a capital bucket (for Hedge/Risk drill-in).
