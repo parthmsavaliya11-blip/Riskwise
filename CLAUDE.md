@@ -187,7 +187,12 @@ Wrap analytical API responses with `with_disclaimer(...)` from
 isolation**. A `User` table (`models/__init__.py`: id=uuid, email, username, bcrypt
 `password_hash`, `email_verified`, `username_changes`, `is_admin`) backs email+password
 signup/login. **Sessions are a JWT in an httpOnly cookie** (`rw_session`) — a login persists
-per browser until logout and the token is unreadable by page scripts. Auth lives in
+per browser until logout and the token is unreadable by page scripts. Sessions are **stateful**:
+the JWT carries a `sid` that must match a `Session` DB row (`models.Session`), validated on every
+request in `require_user`, so a revoked device is logged out on its next call. Login/signup create a
+`Session` and **evict the oldest beyond `MAX_SESSIONS` (2)** — a 3rd device kicks out the 1st; logout
+deletes only that device's row. Frontend drops to login on any `AuthError` (401). Changing the token
+shape invalidates old cookies (users re-login once). Auth lives in
 `backend/app/auth/`: `security.py` (bcrypt hash/verify + PyJWT), `context.py` (a `ContextVar`
 + `current_user_id()`), `deps.py` (`require_user` / `require_admin`). Endpoints:
 `api/auth.py` → `POST /api/auth/signup|login|logout`, `GET /api/auth/me` (public);
