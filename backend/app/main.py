@@ -71,7 +71,18 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+_IS_PROD = settings.environment == "production"
+
+# In production the interactive API docs are turned off (they'd expose the whole API
+# surface publicly); they stay on in development at /docs.
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,6 +91,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """Baseline hardening headers (finance app served over HTTPS)."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"  # no clickjacking / embedding
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if _IS_PROD:
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
 
 # Public routes — no login required.
 app.include_router(status.router)
