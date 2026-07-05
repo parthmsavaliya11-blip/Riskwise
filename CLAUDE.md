@@ -219,10 +219,22 @@ verify/reset links point). Frontend: `Auth.jsx` has login/signup/forgot/reset mo
 `?reset=token`, verify via `?verify=token` handled in `App.jsx`); a non-blocking "verify your email"
 nudge banner in the Shell. **GOTCHA — Resend test mode:** until a domain is verified at
 resend.com/domains (and `EMAIL_FROM` points to it), Resend only delivers to the account owner's own
-email; sending elsewhere 403s. **Auth is complete (Stages 1–3). Next: Render deploy + point the
-domain** (DB → Neon Postgres via `DATABASE_URL`; secrets → Render env; `cookie_secure=True`,
-`app_base_url`/`frontend_origin` → the real domain). Preserve `user_id` + `current_user_id()` scoping
-on any new table.
+email; sending elsewhere 403s. Preserve `user_id` + `current_user_id()` scoping on any new table.
+
+**Production deploy (config shipped; deploy is owner-side dashboard work).** One **Docker single
+service** (`Dockerfile`, multi-stage: `node` builds `frontend/dist`, then `python:3.12-slim` runs
+uvicorn): `main.py` mounts `StaticFiles(frontend/dist, html=True)` at `/` **after** the routers, so
+`/api/*`+`/health`+`/docs` win and everything else is the SPA — one origin, so httpOnly cookies work
+with no CORS. Mount only happens if `frontend/dist` exists (dev = Vite on 5173, no mount). **Postgres**:
+`db.py:_normalize_url` rewrites `postgres://`/`postgresql://` → `postgresql+psycopg://` (driver =
+`psycopg[binary]`), adds `pool_pre_ping`+`pool_recycle` (Neon drops idle conns), and the SQLite-only
+`_migrate_positions` ALTERs are skipped on Postgres (`create_all` makes complete tables). Switching DB is
+purely `DATABASE_URL`. **`render.yaml`** is a Blueprint (Docker web service, `SECRET_KEY` generateValue,
+all secrets `sync:false` → set in the Render dashboard). **`backend/migrate_to_postgres.py`** copies local
+SQLite → Neon (User uuids preserved so `user_id` links survive; other tables' int ids reassigned).
+Owner's data already migrated to Neon. Full runbook in `DEPLOY.md` (rotate secrets, Render Blueprint, env
+vars, Hostinger DNS, Resend domain verify). Prod env: `cookie_secure=True`, `environment=production`,
+`app_base_url`/`frontend_origin` → the real domain.
 
 **Config & secrets.** `backend/app/core/config.py` (`pydantic-settings`) reads
 `backend/.env`. `PROJECT_ROOT` is derived as `config.py`'s `parents[3]`; `DATA_DIR` is
