@@ -206,6 +206,9 @@ the whole app in `App.jsx` (checks `GET /api/auth/me` on mount; `credentials:"in
 fetches; `AuthError` on 401); the Shell top bar shows the username + an "owner" tag + logout.
 New settings in `config.py`: `secret_key` (JWT signing — MUST be a long random value in prod),
 `jwt_expire_days`, `cookie_secure` (True in prod). Deps added: `bcrypt`, `PyJWT`, `email-validator`.
+Sensitive auth routes are **rate-limited** (`auth/ratelimit.py`, in-memory per IP+route: login 10/15m,
+signup/forgot/resend 5/1h, reset 10/1h → 429) — brute-force/spam protection. The login page carries the
+educational-not-advice + read-only + privacy disclaimer.
 **Profile shipped** (`pages/Profile.jsx`, opened from the top-bar user chip): `PUT /api/auth/username`
 (capped at 3 changes via `User.username_changes`, uniqueness-checked) and `PUT /api/auth/password`
 (verifies current password). **Email verification + forgot-password shipped** (`auth/email.py` +
