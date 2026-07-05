@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..auth.deps import SESSION_COOKIE, require_user
 from ..auth.email import send_password_reset, send_verification
+from ..auth.ratelimit import rate_limit
 from ..auth.security import (
     create_token,
     decode_purpose_token,
@@ -68,7 +69,7 @@ def _set_session(response: Response, user_id: str) -> None:
     )
 
 
-@router.post("/signup")
+@router.post("/signup", dependencies=[Depends(rate_limit(5, 3600))])
 def signup(payload: SignupIn, response: Response, db: Session = Depends(get_db)) -> dict:
     email = payload.email.strip().lower()
     username = payload.username.strip()
@@ -109,7 +110,7 @@ def signup(payload: SignupIn, response: Response, db: Session = Depends(get_db))
     return out
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit(10, 900))])
 def login(payload: LoginIn, response: Response, db: Session = Depends(get_db)) -> dict:
     email = payload.email.strip().lower()
     user = db.scalar(select(User).where(func.lower(User.email) == email))
@@ -201,7 +202,7 @@ def verify_email(payload: TokenIn, db: Session = Depends(get_db)) -> dict:
     return {"ok": True, "user": _user_out(user)}
 
 
-@router.post("/verify/resend")
+@router.post("/verify/resend", dependencies=[Depends(rate_limit(5, 3600))])
 def resend_verification(user: User = Depends(require_user)) -> dict:
     if user.email_verified:
         return {"ok": True, "already_verified": True}
@@ -212,7 +213,7 @@ def resend_verification(user: User = Depends(require_user)) -> dict:
     return out
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(rate_limit(5, 3600))])
 def forgot_password(payload: ForgotIn, db: Session = Depends(get_db)) -> dict:
     """Always returns ok — never reveal whether an email is registered."""
     email = payload.email.strip().lower()
@@ -225,7 +226,7 @@ def forgot_password(payload: ForgotIn, db: Session = Depends(get_db)) -> dict:
     return out
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(rate_limit(10, 3600))])
 def reset_password(payload: ResetIn, db: Session = Depends(get_db)) -> dict:
     uid = decode_purpose_token(payload.token, "reset")
     user = db.get(User, uid) if uid else None

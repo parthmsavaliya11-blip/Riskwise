@@ -20,6 +20,10 @@ function Shell({ children, sub }) {
           {children}
         </div>
         {sub && <p className="mt-6 text-center text-xs text-muted">{sub}</p>}
+        <p className="mt-4 text-center text-[11px] leading-relaxed text-muted">
+          Educational and analytical tools only — not investment advice. Broker data is read-only;
+          RiskWise never places orders. Your email and holdings stay private to your account.
+        </p>
       </div>
     </div>
   );
