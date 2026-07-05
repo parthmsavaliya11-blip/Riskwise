@@ -431,13 +431,14 @@ charting library** (no recharts), so draw new charts as SVG rather than adding o
 `sendJSON`).
 
 **First-run experience — entrance + live guided tour.** Two separate pieces, both
-presentational (no data touched). (1) `components/Onboarding.jsx` is a full-screen overlay
-that plays **once per browser session** before the cockpit: **splash** (animated logo + hero
-line "Know your risk. Own your edge." + subline, auto-advances) → **intro** (why risk
-management) → **gate** (a clickable slogan — "Trade with a plan, not a hope."). Enter advances;
-`onDone(withTour)` fires — **Skip / Esc / "Skip to app"** call `onDone(false)` (straight to the
-app), the **gate** calls `onDone(true)` (enter **and** start the tour). `App.jsx` gates it on
-`sessionStorage["rw_onboarded"]`. (2) `components/GuidedTour.jsx` is the **teacher-style tour
+presentational (no data touched). (1) `components/Onboarding.jsx` is a full-screen overlay with
+two **modes**: `mode="full"` (**first-ever visit** — splash → **intro** (why risk management) →
+**gate** ("Trade with a plan, not a hope.") → starts the tour) and `mode="splash"` (**returning
+visits** — just the ~2.6s logo entrance, then the app). `App.jsx` picks the mode: no
+`localStorage["rw_onboarded"]` → `full`; else no `sessionStorage["rw_splash_seen"]` → `splash`
+(once per session); else nothing (same-session refresh). `onDone(withTour)` fires — **Skip / Esc**
+call `onDone(false)` (straight to the app), the **gate** calls `onDone(true)` (enter **and** start
+the tour); finishing sets both storage flags. The tour is always re-openable via "Take the tour". (2) `components/GuidedTour.jsx` is the **teacher-style tour
 that runs OVER the live cockpit**: one step per tab (welcome + the 9 nav items), each step calls
 `onNavigate(view)` to actually open that page, then **spotlights the real nav button** (dimmed
 backdrop with a box-shadow cutout + gold ring around the `[data-tour="nav-<view>"]` element,

@@ -24,29 +24,35 @@ const INTRO_POINTS = [
   },
 ];
 
-export default function Onboarding({ onDone, initialPhase = "splash" }) {
-  const [phase, setPhase] = useState(initialPhase); // splash | intro | gate
+export default function Onboarding({ onDone, mode = "full" }) {
+  // "full" = first-ever visit (splash -> intro -> gate -> tour); "splash" = returning
+  // visit (just the logo entrance, then straight into the app).
+  const splashOnly = mode === "splash";
+  const [phase, setPhase] = useState("splash"); // splash | intro | gate
 
-  // Splash auto-advances; a click or Enter moves it along sooner.
+  // Splash auto-advances — to the app (returning) or to the intro (first time).
   useEffect(() => {
     if (phase !== "splash") return;
-    const t = setTimeout(() => setPhase("intro"), 4200);
+    const t = setTimeout(
+      () => (splashOnly ? onDone(false) : setPhase("intro")),
+      splashOnly ? 2600 : 4200
+    );
     return () => clearTimeout(t);
-  }, [phase]);
+  }, [phase, splashOnly, onDone]);
 
   // Enter advances the linear phases; Escape skips straight into the app.
   useEffect(() => {
     function onKey(e) {
       if (e.key === "Escape") onDone(false);
       if (e.key === "Enter") {
-        if (phase === "splash") setPhase("intro");
+        if (phase === "splash") splashOnly ? onDone(false) : setPhase("intro");
         else if (phase === "intro") setPhase("gate");
         else if (phase === "gate") onDone(true);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, onDone]);
+  }, [phase, splashOnly, onDone]);
 
   return (
     <div
@@ -75,17 +81,19 @@ export default function Onboarding({ onDone, initialPhase = "splash" }) {
         }}
       />
 
-      {/* Skip — always reachable */}
-      <button
-        onClick={() => onDone(false)}
-        className="absolute right-5 top-5 z-10 rounded-full border border-hairline px-4 py-1.5 text-xs font-medium text-muted-strong transition-colors hover:border-hairline-strong hover:text-body"
-      >
-        Skip intro
-      </button>
+      {/* Skip — only in the full first-time flow (the returning splash is quick). */}
+      {!splashOnly && (
+        <button
+          onClick={() => onDone(false)}
+          className="absolute right-5 top-5 z-10 rounded-full border border-hairline px-4 py-1.5 text-xs font-medium text-muted-strong transition-colors hover:border-hairline-strong hover:text-body"
+        >
+          Skip intro
+        </button>
+      )}
 
       <div className="relative z-[5] h-full overflow-y-auto">
         <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 sm:py-20">
-          {phase === "splash" && <Splash />}
+          {phase === "splash" && <Splash splashOnly={splashOnly} />}
           {phase === "intro" && <Intro onContinue={() => setPhase("gate")} onSkip={() => onDone(false)} />}
           {phase === "gate" && <Gate onEnter={() => onDone(true)} />}
         </div>
@@ -94,7 +102,7 @@ export default function Onboarding({ onDone, initialPhase = "splash" }) {
   );
 }
 
-function Splash() {
+function Splash({ splashOnly = false }) {
   return (
     <div key="splash" className="flex flex-col items-center text-center">
       <div className="relative rw-scale-in">
@@ -120,11 +128,11 @@ function Splash() {
       <div className="mt-12 h-[3px] w-44 overflow-hidden rounded-full bg-elevated rw-fade-in rw-d5">
         <div
           className="h-full origin-left rounded-full bg-gold"
-          style={{ animation: "rwProgress 4.2s linear forwards" }}
+          style={{ animation: `rwProgress ${splashOnly ? "2.6s" : "4.2s"} linear forwards` }}
         />
       </div>
       <p className="mt-4 rw-fade-in rw-d6 text-xs uppercase tracking-[0.25em] text-muted">
-        press enter to continue
+        {splashOnly ? "welcome back" : "press enter to continue"}
       </p>
     </div>
   );

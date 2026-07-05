@@ -105,13 +105,19 @@ function App() {
     setTour(true);
   }, []);
 
-  // First-run experience: plays once per browser session, then straight to the app.
-  const [onboarding, setOnboarding] = useState(() =>
-    sessionStorage.getItem("rw_onboarded") ? null : { phase: "splash" }
-  );
+  // Entrance: FIRST-EVER visit gets the full experience (splash → intro → gate → tour,
+  // gated by localStorage). Returning visits get just the logo entrance once per browser
+  // session (sessionStorage); a same-session refresh shows nothing. The tour is always
+  // re-openable from "Take the tour".
+  const [onboarding, setOnboarding] = useState(() => {
+    if (!localStorage.getItem("rw_onboarded")) return { mode: "full" };
+    if (!sessionStorage.getItem("rw_splash_seen")) return { mode: "splash" };
+    return null;
+  });
   const finishOnboarding = useCallback(
     (withTour) => {
-      sessionStorage.setItem("rw_onboarded", "1");
+      localStorage.setItem("rw_onboarded", "1");
+      sessionStorage.setItem("rw_splash_seen", "1");
       setOnboarding(null);
       if (withTour) startTour();
     },
@@ -208,7 +214,7 @@ function App() {
   // The onboarding overlay plays over whatever the app is doing (loading, ready, or
   // even an error) so the entrance is instant and data loads behind it.
   const overlay = onboarding && (
-    <Onboarding initialPhase={onboarding.phase} onDone={finishOnboarding} />
+    <Onboarding mode={onboarding.mode} onDone={finishOnboarding} />
   );
 
   let content;
