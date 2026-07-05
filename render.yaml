@@ -1,0 +1,46 @@
+# Render Blueprint — one Docker web service that serves the API + the built frontend.
+# In the Render dashboard: New → Blueprint → connect this repo. Then fill the secret
+# env vars (marked sync:false) in the dashboard. SECRET_KEY is auto-generated.
+services:
+  - type: web
+    name: riskwise
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # --- non-secret settings ---
+      - key: ENVIRONMENT
+        value: production
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: DATA_PROVIDER
+        value: csv
+      - key: MARKET_DATA
+        value: angel        # owner's data-only Angel feed; set to "none" to disable live prices
+      - key: AI_PROVIDER
+        value: gemini
+      # --- session signing key: Render generates a strong random value ---
+      - key: SECRET_KEY
+        generateValue: true
+      # --- secrets: set the VALUES in the Render dashboard, not in this file ---
+      - key: DATABASE_URL          # your Neon Postgres connection string
+        sync: false
+      - key: APP_BASE_URL          # your live URL, e.g. https://riskwise.yourdomain.com
+        sync: false
+      - key: FRONTEND_ORIGIN       # same as APP_BASE_URL
+        sync: false
+      - key: EMAIL_FROM            # e.g. RiskWise <noreply@yourdomain.com> once your domain is verified
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANGEL_API_KEY
+        sync: false
+      - key: ANGEL_CLIENT_CODE
+        sync: false
+      - key: ANGEL_PIN
+        sync: false
+      - key: ANGEL_TOTP_SECRET
+        sync: false

@@ -29,10 +29,13 @@ from .api import (
     status,
     symbols,
 )
+from pathlib import Path
+
+from fastapi.staticfiles import StaticFiles
+
 from .api.buckets import seed_default_buckets
 from .auth.deps import require_user
-from .core.config import settings
-from .core.disclaimers import DISCLAIMER
+from .core.config import PROJECT_ROOT, settings
 from .db import init_db
 
 
@@ -106,10 +109,11 @@ def health() -> dict:
     return {"status": "ok", "app": settings.app_name}
 
 
-@app.get("/")
-def root() -> dict:
-    return {
-        "name": settings.app_name,
-        "docs": "/docs",
-        "disclaimer": DISCLAIMER,
-    }
+# --- Serve the built frontend (production single-service deploy) ------------
+# In production we build the React app to frontend/dist and serve it from here, so
+# the API and the site share one origin (clean, secure httpOnly cookies — no CORS).
+# Mounted LAST, so /api/*, /health and /docs still win; everything else is the SPA.
+# In dev this folder doesn't exist, so nothing is mounted (Vite serves the frontend).
+_DIST = PROJECT_ROOT / "frontend" / "dist"
+if _DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")

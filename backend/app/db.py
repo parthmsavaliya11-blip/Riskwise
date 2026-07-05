@@ -14,14 +14,31 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from .core.config import settings
 
-# check_same_thread is a SQLite-only flag; harmless to pass conditionally.
-_connect_args = (
-    {"check_same_thread": False}
-    if settings.database_url.startswith("sqlite")
-    else {}
-)
 
-engine = create_engine(settings.database_url, connect_args=_connect_args, future=True)
+def _normalize_url(url: str) -> str:
+    """Make a raw DATABASE_URL SQLAlchemy-ready.
+
+    Managed Postgres (Neon/Render) hands out ``postgres://`` or ``postgresql://``;
+    point both at psycopg v3 so no separate driver guessing is needed. SQLite URLs
+    pass through unchanged.
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
+DATABASE_URL = _normalize_url(settings.database_url)
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+
+# check_same_thread is SQLite-only; Postgres gets a small pooled + pre-ping engine
+# (Neon closes idle connections, so pre-ping avoids stale-connection errors).
+if _is_sqlite:
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False}, future=True)
+else:
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300, future=True)
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
@@ -40,14 +57,15 @@ def init_db() -> None:
     from . import models  # noqa: F401
 
     models.Base.metadata.create_all(bind=engine)
-    _migrate_positions()
+    if _is_sqlite:
+        _migrate_positions()  # Postgres tables are created complete; only SQLite needs ALTERs
 
 
 def _migrate_positions() -> None:
     """Add new ``positions`` columns to an existing SQLite db (create_all won't alter).
 
     Lightweight, idempotent: only adds columns that are missing, so existing rows
-    (the user's holdings) are preserved.
+    (the user's holdings) are preserved. SQLite-only (uses PRAGMA).
     """
     from sqlalchemy import text
 

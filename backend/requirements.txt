@@ -16,6 +16,9 @@ bcrypt
 PyJWT
 email-validator
 
+# --- Postgres driver (production DB; SQLite stays the local default) ---
+psycopg[binary]
+
 # --- Live mode (Angel One SmartAPI). smartapi-python under-declares its deps,
 # so logzero + websocket-client are listed explicitly. ---
 smartapi-python

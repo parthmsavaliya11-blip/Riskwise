@@ -1,0 +1,13 @@
+# Keep the build context lean and secret-free
+.git
+**/.env
+**/.venv
+**/__pycache__
+**/node_modules
+frontend/dist
+data/*.db
+data/*.db-journal
+data/angel_instruments.json
+logs
+.claude
+*.md
