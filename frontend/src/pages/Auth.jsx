@@ -8,6 +8,11 @@ import { Button, Field } from "../components/ui";
 const INPUT =
   "w-full rounded-lg border border-hairline bg-elevated/60 px-3 py-2 text-sm text-body outline-none transition-colors placeholder:text-muted focus:border-gold/50 focus:ring-2 focus:ring-gold/20";
 
+// Every character is allowed in a password — this line tells the user so and nudges
+// them toward a strong mix (the friend thought symbols were blocked; they never were).
+const PW_HINT =
+  "At least 8 characters. Use a mix of UPPER/lowercase letters, numbers and symbols (! @ # $ % & * etc.) — every character is allowed, and a mix makes it stronger.";
+
 function Shell({ children, sub }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
@@ -97,7 +102,7 @@ export default function Auth({ onAuthed, resetToken, onResetDone, flash }) {
         <h1 className="text-lg font-semibold text-headline">Set a new password</h1>
         <p className="mt-1 mb-4 text-sm text-muted">Choose a new password for your account.</p>
         <form onSubmit={submitReset} className="space-y-4">
-          <Field label="New password" hint="At least 8 characters">
+          <Field label="New password" hint={PW_HINT}>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder="••••••••" className={INPUT} />
           </Field>
           {error && <p className="rounded-lg border border-down/25 bg-down/5 px-3 py-2 text-sm text-down">{error}</p>}
@@ -169,7 +174,7 @@ export default function Auth({ onAuthed, resetToken, onResetDone, flash }) {
             <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" placeholder="yourname" className={INPUT} />
           </Field>
         )}
-        <Field label="Password" hint={isSignup ? "At least 8 characters" : undefined}>
+        <Field label="Password" hint={isSignup ? PW_HINT : undefined}>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="••••••••" className={INPUT} />
         </Field>
         {error && <p className="rounded-lg border border-down/25 bg-down/5 px-3 py-2 text-sm text-down">{error}</p>}

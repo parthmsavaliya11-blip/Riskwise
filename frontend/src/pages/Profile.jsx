@@ -111,7 +111,10 @@ export default function Profile({ user, onUserUpdate }) {
             <Field label="Current password">
               <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} className={INPUT} autoComplete="current-password" />
             </Field>
-            <Field label="New password" hint="At least 8 characters">
+            <Field
+              label="New password"
+              hint="At least 8 characters. Use a mix of UPPER/lowercase letters, numbers and symbols (! @ # $ % & * etc.) — every character is allowed, and a mix makes it stronger."
+            >
               <input type="password" value={nw} onChange={(e) => setNw(e.target.value)} className={INPUT} autoComplete="new-password" />
             </Field>
             <div className="sm:col-span-2">
