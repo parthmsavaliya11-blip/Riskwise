@@ -27,25 +27,32 @@ def get_portfolio() -> dict:
     total_invested = 0.0
 
     for h in holdings:
+        # Leverage-aware capital view: for F&O `capital` is Angel's margin (not the full
+        # contract value), so allocation % and % return reflect the money actually
+        # deployed. Rupee P&L is unchanged. `notional`/`leverage` are exposed for display.
         rows.append(
             {
                 "symbol": h.symbol,
                 "quantity": h.quantity,
                 "avg_price": round(h.avg_price, 2),
                 "ltp": round(h.ltp, 2),
-                "invested": round(h.invested, 2),
-                "current_value": round(h.current_value, 2),
+                "invested": round(h.capital, 2),
+                "current_value": round(h.capital_value, 2),
                 "pnl": round(h.pnl, 2),
-                "pnl_pct": round(h.pnl_pct, 2),
+                "pnl_pct": round(h.capital_pnl_pct, 2),
+                "kind": h.kind,
+                "margin": round(h.margin, 2) if h.margin is not None else None,
+                "notional": round(h.current_value, 2),
+                "leverage": round(h.leverage, 1) if h.leverage is not None else None,
                 "bucket": h.bucket,
                 "basket_id": h.basket_id,
                 "basket_label": h.basket_label,
             }
         )
-        bucket_value[h.bucket] += h.current_value
-        bucket_invested[h.bucket] += h.invested
-        total_value += h.current_value
-        total_invested += h.invested
+        bucket_value[h.bucket] += h.capital_value
+        bucket_invested[h.bucket] += h.capital
+        total_value += h.capital_value
+        total_invested += h.capital
 
     buckets = [
         {

@@ -129,6 +129,35 @@ guarded against a zero-width rect. Shared, so the Options page gets it too. (3) 
 F&O. Live option premiums for the chain use `market.ltp_many` (one batched `getMarketData("LTP",…)`,
 chunked at 50 tokens/call).
 
+**F&O is leverage-aware: capital = Angel margin, not notional.** F&O gives leverage — you only
+put up SPAN+exposure **margin**, not the full contract value — so counting an F&O position at
+`qty × price` (notional) massively overstated its share of capital (a NIFTY future looked like
+~₹12L "invested" when Angel blocks ~₹1.2L). The **capital / allocation / %-return** views now use
+the **real Angel margin** as the deployed capital. Mechanism: `Holding` keeps `invested`/`current_value`
+= **notional** (qty×avg / qty×ltp) — **hedge and risk read these and must**, since a future's market
+*exposure* is its full contract value, not its margin — and adds a leverage-aware layer: `capital`
+(= `margin` for F&O, else cost), `capital_value` (= `capital + pnl`), `capital_pnl_pct` (= pnl/capital),
+and `leverage` (= notional/margin). **Rupee `pnl` is unchanged** (a future's rupee P&L is its notional
+change, independent of how capital is measured). The margin itself is resolved by
+`holdings.resolve_fno_margins(legs, mkt)` (shared by `load_holdings`'s `_apply_holding_margins` and
+`positions._list`): legs saved as **one basket** (`basket_id`) are **netted together** via
+`market.basket_margin_total` (so the hedge benefit shows), then split across those legs by notional
+weight (display only — the group renders as one holding); each **standalone** F&O leg is priced on its
+own (no netting between unrelated trades). `basket_margin_total` wraps `getMarginApi` and **caches**
+the total per leg-set (`_MARGIN_TTL=120s`, price excluded from the key since margin is stable while LTP
+ticks). **Offline / feed-off / any failure → `margin` stays None → capital falls back to notional**
+(current behaviour, so verify scripts + CSV mode are unaffected). The JSON views reflect this:
+`/api/portfolio` and `/api/positions` now emit `invested`=capital, `current_value`=capital_value,
+`pnl_pct`=capital_pnl_pct, plus `notional`/`margin`/`leverage` per row; `/api/allocation` aggregates
+`capital`/`capital_value` per bucket (drift stays consistent with the portfolio). **Basket** analyse
+adds `notional` (gross contract value) + `leverage` (notional/`margin_required`). Frontend: My Holdings
+F&O rows show a "N× leverage · controls ₹X" sub-line (value column = margin+MTM), and the Basket margin
+box shows "≈N× leverage · controls ₹X". `groupHoldings` sums the leverage-aware `invested`/`current_value`
+so basket summary rows stay leverage-aware too. **Journal FY-review held-capital is intentionally left at
+notional** (realised-trade context, out of this scope). Verified offline in `backend/verify_leverage.py`
+(equity unchanged; long/short future capital=margin, signs, leverage ~10×; basket netting+split; notional
+fallback) — live margins need the Angel feed (owner-side).
+
 **Live prices are batched + warmed, not one-call-per-stock.** Resolving each holding with its
 own `ltpData` call made `/api/portfolio` ~15s and, on a cold feed, fall back to **cost** (the
 top bar showed cost totals that never refreshed). Fix: `market.ltp_many({exch:[tokens]})` does

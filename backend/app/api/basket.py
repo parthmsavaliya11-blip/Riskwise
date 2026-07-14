@@ -103,8 +103,13 @@ def _margins(mkt, req: BasketRequest) -> dict:
     its risk legs alone (e.g. a naked future). ``margin_unhedged`` drops the long-option
     hedges to show that saving. All None when the feed/tokens are unavailable.
     """
+    # Gross notional (full contract value of every leg) — the leverage numerator, and a
+    # feed-independent figure so we can always show how much less than notional you deploy.
+    gross_notional = round(sum(lg.lots * req.lot_size * lg.price for lg in req.legs), 2)
+
     if mkt is None:
-        return {"margin_required": None, "margin_unhedged": None, "margin_saved": None}
+        return {"margin_required": None, "margin_unhedged": None, "margin_saved": None,
+                "notional": gross_notional, "leverage": None}
 
     def to_pos(lg: BasketLeg) -> dict | None:
         if not lg.token:
@@ -115,10 +120,14 @@ def _margins(mkt, req: BasketRequest) -> dict:
 
     all_pos = [p for p in (to_pos(l) for l in req.legs) if p]
     if not all_pos:
-        return {"margin_required": None, "margin_unhedged": None, "margin_saved": None}
+        return {"margin_required": None, "margin_unhedged": None, "margin_saved": None,
+                "notional": gross_notional, "leverage": None}
 
     full = mkt.basket_margin(all_pos)
     margin_required = (full or {}).get("totalMarginRequired")
+    # Leverage = full contract value / capital you actually block.
+    leverage = (round(gross_notional / margin_required, 1)
+                if margin_required and gross_notional else None)
 
     # "Unhedged" = the margin-consuming legs only (futures + short options), i.e. drop the
     # long-option hedges. Only meaningful when there IS a hedge to remove.
@@ -133,4 +142,4 @@ def _margins(mkt, req: BasketRequest) -> dict:
             margin_saved = round(margin_unhedged - margin_required, 2)
 
     return {"margin_required": margin_required, "margin_unhedged": margin_unhedged,
-            "margin_saved": margin_saved}
+            "margin_saved": margin_saved, "notional": gross_notional, "leverage": leverage}

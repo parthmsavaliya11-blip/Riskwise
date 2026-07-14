@@ -109,15 +109,27 @@ def _expiry_of(p: Position, mkt):
     return None
 
 
-def _row(p: Position, provider) -> dict:
+def _row(p: Position, provider, margin: float | None = None) -> dict:
     ltp, source = _resolve_ltp(provider, p)
     side = getattr(p, "side", None) or "buy"
-    invested = p.quantity * p.avg_price
-    value = p.quantity * ltp
-    # Short legs (sold options/futures) profit when price falls.
-    pnl = (value - invested) if side != "sell" else (invested - value)
     lot_size = p.lot_size or 1
     is_fno = (p.kind or "EQ") != "EQ"
+    notional_cost = p.quantity * p.avg_price
+    notional_value = p.quantity * ltp
+    # Short legs (sold options/futures) profit when price falls. Rupee P&L is on the full
+    # notional and is unchanged by leverage.
+    pnl = (notional_value - notional_cost) if side != "sell" else (notional_cost - notional_value)
+
+    # Leverage-aware capital: for F&O the deployed capital is Angel's margin, not the full
+    # contract value, so allocation and % return reflect reality. `notional`/`leverage` are
+    # exposed for display. Equity (or when the margin isn't available) uses full cost/value.
+    if is_fno and margin is not None:
+        capital = round(margin, 2)
+        value = round(capital + pnl, 2)
+        leverage = round(abs(notional_value) / margin, 1) if margin > 0 else None
+    else:
+        capital, value, leverage, margin = notional_cost, notional_value, None, None
+
     return {
         "id": p.id,
         "symbol": p.symbol,
@@ -135,15 +147,19 @@ def _row(p: Position, provider) -> dict:
         "avg_price": round(p.avg_price, 2),
         "ltp": round(ltp, 2),
         "price_source": source,  # live | manual | cost
-        "invested": round(invested, 2),
+        "invested": round(capital, 2),
         "current_value": round(value, 2),
+        "notional": round(notional_value, 2),
+        "margin": round(margin, 2) if margin is not None else None,
+        "leverage": leverage,
         "pnl": round(pnl, 2),
-        "pnl_pct": round(pnl / invested * 100, 2) if invested else 0.0,
+        "pnl_pct": round(pnl / capital * 100, 2) if capital else 0.0,
         "buy_date": p.buy_date.date().isoformat() if p.buy_date else None,
     }
 
 
 def _list(db: Session, provider) -> dict:
+    from ..holdings import resolve_fno_margins
     from ..market import get_market
 
     stmt = (
@@ -153,9 +169,21 @@ def _list(db: Session, provider) -> dict:
     )
     positions = list(db.scalars(stmt))
     mkt = get_market()
+    margin_by_id: dict = {}
     if mkt is not None:
         mkt.warm_positions(positions)  # one batched live-price call for the whole table
-    rows = [_row(p, provider) for p in positions]
+        # Real Angel margin per F&O leg (leverage-aware capital), keyed by position id.
+        legs = []
+        for p in positions:
+            if (p.kind or "EQ") == "EQ" or not p.token:
+                continue
+            ltp, _ = _resolve_ltp(provider, p)
+            legs.append({"key": p.id, "token": p.token, "exchange": p.exchange,
+                         "qty": p.quantity, "price": ltp,
+                         "side": getattr(p, "side", None) or "buy",
+                         "kind": p.kind, "basket_id": getattr(p, "basket_id", None)})
+        margin_by_id = resolve_fno_margins(legs, mkt)
+    rows = [_row(p, provider, margin_by_id.get(p.id)) for p in positions]
     return with_disclaimer({"positions": rows, "using_sample": len(rows) == 0})
 
 

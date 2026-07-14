@@ -32,12 +32,14 @@ router = APIRouter(prefix="/api", tags=["allocation"])
 def get_allocation(db: Session = Depends(get_db)) -> dict:
     holdings = load_holdings()
 
-    # Aggregate current value + cost basis per bucket from holdings.
+    # Aggregate capital + value per bucket. F&O uses leverage-aware capital (Angel margin)
+    # so a leveraged future doesn't dwarf the allocation by its full contract value; this
+    # keeps the drift report consistent with the portfolio view. Equity is unchanged.
     value_by_bucket: dict[str, float] = defaultdict(float)
     invested_by_bucket: dict[str, float] = defaultdict(float)
     for h in holdings:
-        value_by_bucket[h.bucket] += h.current_value
-        invested_by_bucket[h.bucket] += h.invested
+        value_by_bucket[h.bucket] += h.capital_value
+        invested_by_bucket[h.bucket] += h.capital
 
     actuals = [
         BucketActual(

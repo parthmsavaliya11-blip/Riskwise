@@ -438,6 +438,11 @@ export default function Basket() {
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-muted">Margin required (SPAN + exposure)</p>
                     <p className="mt-0.5 text-2xl font-bold text-headline tnum">{inr(result.margin_required)}</p>
+                    {result.leverage != null && (
+                      <p className="mt-0.5 text-[11px] text-gold">
+                        ≈ {result.leverage}× leverage · controls {inr(result.notional)} of contract value
+                      </p>
+                    )}
                   </div>
                   {result.margin_saved != null && result.margin_saved > 0 && (
                     <div className="text-right">

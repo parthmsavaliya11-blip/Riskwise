@@ -214,14 +214,23 @@ export default function Holdings({ buckets, onReload }) {
         className={`border-b border-hairline/60 last:border-0 hover:bg-elevated/40 ${indented ? "bg-elevated/10" : ""}`}
       >
         <td className={`${indented ? "pl-12 pr-5" : "px-5"} py-3 font-medium text-body`}>
-          {indented && <span className="mr-1 text-muted">↳</span>}
-          {p.kind && p.kind !== "EQ" ? p.tradingsymbol : p.symbol}
-          {p.kind && p.kind !== "EQ" && p.side && (
-            <span className={`ml-1.5 rounded px-1 py-0.5 text-[10px] font-semibold ${p.side === "sell" ? "bg-down/15 text-down" : "bg-up/15 text-up"}`}>
-              {p.side === "sell" ? "SELL" : "BUY"}
-            </span>
+          <div>
+            {indented && <span className="mr-1 text-muted">↳</span>}
+            {p.kind && p.kind !== "EQ" ? p.tradingsymbol : p.symbol}
+            {p.kind && p.kind !== "EQ" && p.side && (
+              <span className={`ml-1.5 rounded px-1 py-0.5 text-[10px] font-semibold ${p.side === "sell" ? "bg-down/15 text-down" : "bg-up/15 text-up"}`}>
+                {p.side === "sell" ? "SELL" : "BUY"}
+              </span>
+            )}
+            {p.exchange && <span className="ml-1.5 text-[10px] text-muted">{p.exchange}</span>}
+          </div>
+          {/* F&O is leveraged: the value shown is Angel's margin (+ MTM), not the full
+              contract value — spell out the leverage and what it actually controls. */}
+          {p.kind && p.kind !== "EQ" && p.leverage != null && (
+            <div className="mt-0.5 text-[10px] text-muted">
+              {p.leverage}× leverage · controls {inr(p.notional)}
+            </div>
           )}
-          {p.exchange && <span className="ml-1.5 text-[10px] text-muted">{p.exchange}</span>}
         </td>
         <td className="px-5 py-3">
           <span className="flex items-center gap-1.5 text-muted-strong">

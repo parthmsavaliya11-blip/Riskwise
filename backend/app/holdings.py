@@ -48,6 +48,62 @@ def _resolve_ltp(provider, p: Position) -> tuple[float, str]:
     return p.avg_price, "cost"
 
 
+def resolve_fno_margins(legs: list[dict], mkt) -> dict:
+    """Real Angel SPAN+exposure margin per F&O leg, keyed by each leg's ``key``.
+
+    F&O is leveraged — the capital deployed is the margin the exchange blocks, not the
+    full contract value. We ask Angel's batch calculator (``basket_margin_total``):
+      * legs saved as ONE basket (same ``basket_id``) are netted together, so the hedge
+        benefit is reflected (a hedged basket blocks far less than its naked legs), then
+        the netted total is split across those legs by notional weight (display only —
+        the group renders as one holding anyway);
+      * each standalone F&O leg is priced on its own (no netting between unrelated trades,
+        which is the conservative, interpretable choice).
+    Equity legs and anything without a token/live-feed get no margin (caller falls back
+    to notional). Returns ``{key: margin}`` only for legs we could price.
+    """
+    if mkt is None:
+        return {}
+    fno = [l for l in legs if (l.get("kind") or "EQ") != "EQ" and l.get("token")]
+    if not fno:
+        return {}
+
+    groups: dict[object, list[dict]] = {}
+    for l in fno:
+        gid = l.get("basket_id") or ("__solo__", l["key"])  # standalone legs group alone
+        groups.setdefault(gid, []).append(l)
+
+    out: dict = {}
+    for members in groups.values():
+        pos = [
+            {"token": l["token"], "exchange": l.get("exchange") or "NFO",
+             "qty": int(l["qty"]), "price": float(l.get("price") or 0),
+             "tradeType": "SELL" if (l.get("side") or "buy") == "sell" else "BUY"}
+            for l in members
+        ]
+        total = mkt.basket_margin_total(pos)
+        if total is None:
+            continue  # leave these legs unmargined -> caller uses notional
+        weights = [abs(float(l["qty"]) * float(l.get("price") or 0)) for l in members]
+        wsum = sum(weights)
+        for l, w in zip(members, weights):
+            out[l["key"]] = total * (w / wsum) if wsum else total / len(members)
+    return out
+
+
+def _apply_holding_margins(holdings: list[Holding], mkt) -> None:
+    """Fill in each F&O holding's Angel margin (leverage-aware capital)."""
+    legs = [
+        {"key": i, "token": h.token, "exchange": h.exchange, "qty": h.quantity,
+         "price": h.ltp, "side": h.side, "kind": h.kind, "basket_id": h.basket_id}
+        for i, h in enumerate(holdings)
+    ]
+    margins = resolve_fno_margins(legs, mkt)
+    for i, h in enumerate(holdings):
+        if i in margins:
+            h.margin = round(margins[i], 2)
+
+
 def load_holdings() -> list[Holding]:
     """User positions (if any) with LTP filled in, else the provider's sample/live holdings."""
     provider = get_provider()
@@ -83,6 +139,10 @@ def load_holdings() -> list[Holding]:
                     basket_id=getattr(p, "basket_id", None),
                     basket_label=getattr(p, "basket_label", None))
         )
+    # F&O leverage: attach the real Angel margin so capital/allocation/return are
+    # leverage-aware (falls back to notional for anything the feed can't price).
+    if mkt is not None:
+        _apply_holding_margins(holdings, mkt)
     return holdings
 
 

@@ -38,6 +38,7 @@ _CANDLE_TTL = 3600               # daily candles barely move intraday; cache per
 _CANDLE_EMPTY_TTL = 90           # but cache a FAILED/empty fetch only briefly, so a transient Angel
                                  # hiccup doesn't pin a holding to assumed-beta for a whole hour
 _CANDLE_MIN_GAP = 0.34           # min seconds between historical calls (Angel caps ~3 req/s)
+_MARGIN_TTL = 120                # SPAN+exposure margin barely moves intraday; cache per leg-set
 
 # Spot-index tokens for historical candles (stable Angel tokens; exchange = segment).
 # Used so beta is computed against the REAL index series, not a sample CSV. Each index
@@ -68,6 +69,7 @@ class AngelMarket:
         self._candle_cache: dict[str, tuple[float, object]] = {}
         self._last_candle_ts: float = 0.0
         self._primary_exch: dict[str, str | None] = {}
+        self._margin_cache: dict[tuple, tuple[float, float | None]] = {}
 
     # --- session (only needed for live LTP) -------------------------------
     def _session(self):
@@ -421,6 +423,35 @@ class AngelMarket:
         except Exception:
             pass
         return None
+
+    def basket_margin_total(self, positions: list[dict]) -> float | None:
+        """Total SPAN+exposure margin (a single number) for a leg-set, cached.
+
+        Same call as ``basket_margin`` but returns just ``totalMarginRequired`` and
+        caches it keyed by the legs (token/exchange/qty/side) so repeatedly loading the
+        portfolio doesn't re-hit Angel every time. Price is excluded from the key on
+        purpose — margin is stable intraday while LTP ticks. None on failure/feed-off.
+        """
+        legs = [p for p in positions if p.get("token")]
+        if not legs:
+            return None
+        key = tuple(sorted(
+            (str(p["token"]), p.get("exchange") or "NFO", int(p["qty"]),
+             (p.get("tradeType") or "BUY").upper())
+            for p in legs
+        ))
+        cached = self._margin_cache.get(key)
+        if cached and time.time() - cached[0] < _MARGIN_TTL:
+            return cached[1]
+        data = self.basket_margin(legs)
+        total = None
+        if data is not None:
+            try:
+                total = float(data.get("totalMarginRequired"))
+            except (TypeError, ValueError):
+                total = None
+        self._margin_cache[key] = (time.time(), total)
+        return total
 
     def option_chain(self, name: str, expiry: str, width: int = 12) -> dict:
         """Live option chain around ATM: strikes with CE/PE token + premium.
