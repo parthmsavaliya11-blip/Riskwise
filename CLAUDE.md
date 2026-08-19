@@ -240,9 +240,16 @@ the whole app in `App.jsx` (checks `GET /api/auth/me` on mount; `credentials:"in
 fetches; `AuthError` on 401); the Shell top bar shows the username + an "owner" tag + logout.
 New settings in `config.py`: `secret_key` (JWT signing — MUST be a long random value in prod),
 `jwt_expire_days`, `cookie_secure` (True in prod). Deps added: `bcrypt`, `PyJWT`, `email-validator`.
-Sensitive auth routes are **rate-limited** (`auth/ratelimit.py`, in-memory per IP+route: login 10/15m,
-signup/forgot/resend 5/1h, reset 10/1h → 429) — brute-force/spam protection. The login page carries the
-educational-not-advice + read-only + privacy disclaimer.
+Sensitive auth routes are **rate-limited** (`auth/ratelimit.py`, in-memory). **Login throttles only
+FAILED attempts, keyed per account+IP, and clears the counter on a successful sign-in** (10 fails/15m →
+429). This was a real bug fix: the old blanket IP limiter counted *successful* logins and never reset, so a
+few typos — or several friends behind one NAT IP — exhausted the 10/15m budget and the app then refused the
+**correct** password for the whole window (a locked-out user "can't sign in"). Now a valid password is
+never blocked, one account's failures can't lock another user on the same network, and brute-force is still
+stopped after 10 failed tries on a given account. Other routes stay IP+route fixed-window (signup 20/1h,
+forgot 10/1h, resend 5/1h, reset 10/1h). Counters are in-memory, so a **redeploy clears them** — which also
+instantly unblocks anyone currently locked. The login page carries the educational-not-advice + read-only +
+privacy disclaimer.
 **Profile shipped** (`pages/Profile.jsx`, opened from the top-bar user chip): `PUT /api/auth/username`
 (capped at 3 changes via `User.username_changes`, uniqueness-checked) and `PUT /api/auth/password`
 (verifies current password). **Email verification + forgot-password shipped** (`auth/email.py` +

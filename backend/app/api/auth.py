@@ -18,7 +18,13 @@ from sqlalchemy.orm import Session
 
 from ..auth.deps import SESSION_COOKIE, require_user
 from ..auth.email import send_password_reset, send_verification
-from ..auth.ratelimit import rate_limit
+from ..auth.ratelimit import (
+    clear_login_failures,
+    login_failure_key,
+    login_locked,
+    rate_limit,
+    record_login_failure,
+)
 from ..auth.security import (
     create_token,
     decode_purpose_token,
@@ -38,6 +44,10 @@ _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
 # How many devices a user can be signed in on at once. A newer login past this cap
 # evicts the oldest, which logs that device out on its next request.
 MAX_SESSIONS = 2
+# Login throttle: lock an account+IP only after this many FAILED attempts in the
+# window (successful logins don't count and clear the counter).
+LOGIN_MAX_FAILS = 10
+LOGIN_FAIL_WINDOW = 900  # 15 minutes
 
 
 class SignupIn(BaseModel):
@@ -95,7 +105,7 @@ def _start_session(response: Response, user: User, db: Session, request: Request
     )
 
 
-@router.post("/signup", dependencies=[Depends(rate_limit(5, 3600))])
+@router.post("/signup", dependencies=[Depends(rate_limit(20, 3600))])
 def signup(payload: SignupIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
     email = payload.email.strip().lower()
     username = payload.username.strip()
@@ -136,12 +146,23 @@ def signup(payload: SignupIn, request: Request, response: Response, db: Session 
     return out
 
 
-@router.post("/login", dependencies=[Depends(rate_limit(10, 900))])
+@router.post("/login")
 def login(payload: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
     email = payload.email.strip().lower()
+    # Throttle only FAILED attempts, per account+IP, and clear on success — so a valid
+    # password is never blocked by earlier typos and one account's failures can't lock
+    # another user sharing the same network.
+    fail_key = login_failure_key(request, email)
+    if login_locked(fail_key, LOGIN_MAX_FAILS, LOGIN_FAIL_WINDOW):
+        raise HTTPException(
+            429,
+            "Too many failed sign-in attempts for this account. Wait a few minutes, or reset your password.",
+        )
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     if user is None or not verify_password(payload.password, user.password_hash):
+        record_login_failure(fail_key)
         raise HTTPException(401, "Wrong email or password.")
+    clear_login_failures(fail_key)  # a correct sign-in wipes the failure counter
     _start_session(response, user, db, request)
     return {"user": _user_out(user)}
 
@@ -248,7 +269,7 @@ def resend_verification(user: User = Depends(require_user)) -> dict:
     return out
 
 
-@router.post("/forgot-password", dependencies=[Depends(rate_limit(5, 3600))])
+@router.post("/forgot-password", dependencies=[Depends(rate_limit(10, 3600))])
 def forgot_password(payload: ForgotIn, db: Session = Depends(get_db)) -> dict:
     """Always returns ok — never reveal whether an email is registered."""
     email = payload.email.strip().lower()

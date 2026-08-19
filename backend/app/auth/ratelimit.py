@@ -53,3 +53,33 @@ def rate_limit(limit: int, window_seconds: int):
         _prune(now)
 
     return dep
+
+
+# --- login-specific throttle -------------------------------------------------
+# The blanket IP limiter above locks out legitimate users: it counts *successful*
+# logins, never resets, and keys on IP alone — so a few typos, or several people on
+# one network (shared NAT IP), exhaust the budget and then the CORRECT password is
+# refused for the whole window. For login we instead count only FAILED attempts,
+# key them per account + IP, and clear them on success, so brute-force is still
+# stopped but a valid sign-in is never blocked.
+_login_fails: dict[str, list[float]] = defaultdict(list)
+
+
+def login_failure_key(request: Request, email: str) -> str:
+    return f"{_client_ip(request)}|{email.strip().lower()}"
+
+
+def login_locked(key: str, limit: int, window_seconds: int) -> bool:
+    now = time.time()
+    cutoff = now - window_seconds
+    hits = _login_fails[key]
+    hits[:] = [t for t in hits if t > cutoff]
+    return len(hits) >= limit
+
+
+def record_login_failure(key: str) -> None:
+    _login_fails[key].append(time.time())
+
+
+def clear_login_failures(key: str) -> None:
+    _login_fails.pop(key, None)
